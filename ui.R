@@ -24,7 +24,10 @@ shinyUI(fluidPage(
                               
                            uiOutput("choose"),
                            selectInput("dataset", "Choose a dataset:",
-                                       choices = c("rock", "pressure", "cars"))
+                                       choices = c("rock", "pressure", "cars")),
+                           sliderInput("monthSelector", "Integer:", 
+                                       min = 0, max = 12, value = 1, step= 1)
+                           
                            
              ))
   )
