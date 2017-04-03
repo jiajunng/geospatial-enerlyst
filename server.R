@@ -17,10 +17,12 @@ library(spatstat)
 
 shpListName <-list()
 shpList<-list()
+
 shinyServer(function(input, output) {
   in_data <- reactive({
     shpListName<<-c(shpListName,gsub("\\..*","",input$inputdata$name[1]))
   })
+  
   observe({
     print(input$monthSelector)
     
@@ -36,7 +38,6 @@ shinyServer(function(input, output) {
     # use spatiaEco to map houses to subzones
     privEC_in_subzone <- point.in.poly(privEC, subzones)
     privEC_in_subzone_df <- as.data.frame(privEC_in_subzone)
-    
     
     aggregated_avg_priv_ec_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_df, subzones)
     #print(aggregated_avg_priv_ec_by_subzone$X1)
@@ -97,8 +98,8 @@ shinyServer(function(input, output) {
     # 
     # proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
     # shapeData1 <- spTransform(subzones, CRS("+proj=longlat +datum=WGS84 +no_defs"))
-    leafletProxy("mymap") %>%
-      addPolygons(data = shapeData1, color = "03F")
+    proxy <- leafletProxy("mymap") %>%
+      addPolygons(data = shapeData1, color="black", fillColor="orange", fillOpacity=1)
     
   })
   
