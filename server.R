@@ -14,7 +14,10 @@ library(plyr)
 library(spdep)
 library(GISTools)
 library(spatstat)
+library(classInt)
+library(RColorBrewer)
 
+month <- 0
 shpListName <-list()
 shpList<-list()
 ecList<-list()
@@ -45,10 +48,11 @@ shinyServer(function(input, output) {
       ecList[["2015"]] <<- aggregated_avg_priv_ec_by_subzone
       # ecList<<-c(shpList,aggregated_avg_priv_ec_by_subzone)
     }
-     
+    
     print(paste("X", input$monthSelector, sep=""))
-    monthName <- switch(input$monthSelector, "1" = "Jan", "2" = "Feb", "3" = "Mar","4" = "Apr", "5" = "May",
-                         "6" = "Jun", "7"="Jul","8"="Aug","9"="Sep","10"="Oct","11"="Nov","12"="Dec")
+    monthName <- switch(input$monthSelector, "1" = "Jan", "2" = "Feb", "3" = "Mar",
+                        "4" = "Apr", "5" = "May", "6" = "Jun", "7"="Jul","8"="Aug",
+                        "9"="Sep","10"="Oct","11"="Nov","12"="Dec")
     output$title <- renderUI({
       h3(paste("Energy Consumption in ", monthName))
     })
@@ -57,6 +61,11 @@ shinyServer(function(input, output) {
     aggregated_avg_priv_ec_by_subzone<-ecList[["2015"]] 
     aggregated_avg_priv_ec_by_subzone_noNA <- completeFun(aggregated_avg_priv_ec_by_subzone, monthName)
     subzones_noNA <- merge(subzones, aggregated_avg_priv_ec_by_subzone_noNA, by.x="SUBZONE_N", by.y="SUBZONE_N", all.x=FALSE)
+    
+    
+    
+    
+    
     
     wm_q <- poly2nb(subzones_noNA, queen=TRUE)
     rswm_q <- nb2listw(wm_q, zero.policy = TRUE)
@@ -104,12 +113,28 @@ shinyServer(function(input, output) {
     #title("LISA Cluster Map")
     proj4string(subzones_noNA) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
      shapeData1 <- spTransform(subzones_noNA, CRS("+proj=longlat +datum=WGS84 +no_defs"))
-    leafletProxy("mymap") %>% clearShapes()
+     
+     pcol.C = rev(brewer.pal(6,"Blues"))
+     frame.C <- as.data.frame(shapeData1[,c(monthName)])
+     nclass.C =classIntervals(frame.C[,1], n=6, style='jenks', intervalClosure='right')
+     colcode.C = findColours(nclass.C, pcol.C)
+     qpal.C <- colorQuantile("Blues", shapeData1$Jan, n = 6)
+     
+     pcol.LMI= brewer.pal(5,"PRGn")
+     nclass.LMI =classIntervals(localMI[,1], n=6, intervalClosure='right')
+     colcode.LMI = findColours(nclass.LMI, pcol.LMI)
+     
     leafletProxy("mymap") %>%
        addTiles() %>% 
-       addPolygons(data = shapeData1, color = "black",fillOpacity=0.4, weight=2,
-                   fillColor = colors[findInterval(quadrant,brks,all.inside=FALSE)]
-                   , group="LISA")
+      addPolygons(data = shapeData1, color = "black", fillColor = colcode.C, weight=1,
+                  fillOpacity=0.7, group="Choropleth")%>%
+       addPolygons(data = shapeData1, color = "black", fillOpacity=0.5, weight=1,
+                   fillColor = colors[findInterval(quadrant,brks,all.inside=FALSE)], 
+                   group="LISA") %>%
+      addPolygons(data = shapeData1, color = "black", weight=1,
+                  fillColor = colcode.LMI, fillOpacity = 0.7, group = "Local Moran I") %>%
+      addLegend(pal = qpal.C, values = shapeData1$Jan, opacity = 1)
+    
     
     output$MS <- renderPlot({
       moran.plot(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)], rswm_q, zero.policy = TRUE, spChk=FALSE, labels=as.character(aggregated_avg_priv_ec_by_subzone_noNA$SUBZONE_N), xlab="Average Energy Consumption", ylab="Spatially Lag Average Energy Consumption")
@@ -186,7 +211,6 @@ shinyServer(function(input, output) {
     return(subzones)
   }
   
-  
   observe({
     myshape<- input$inputdata
     if (is.null(myshape)) 
@@ -233,7 +257,7 @@ shinyServer(function(input, output) {
     addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
     addLayersControl(
       baseGroups = c("OSM (default)", "Toner", "Toner Lite"),
-      overlayGroups = c("LISA"),
+      overlayGroups = c("Choropleth", "LISA", "Local Moran I"),
       options = layersControlOptions(collapsed = FALSE)
     )
   
