@@ -17,39 +17,56 @@ library(spatstat)
 
 shpListName <-list()
 shpList<-list()
-
+ecList<-list()
+subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL")
 shinyServer(function(input, output) {
   in_data <- reactive({
     shpListName<<-c(shpListName,gsub("\\..*","",input$inputdata$name[1]))
   })
   
   observe({
-    print(input$monthSelector)
     
-    subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL") # read shapefile
+    #print(input$monthSelector)
+    if (length(ecList)==0) {
+      #subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL") # read shapefile
+      
+      # read private housing energy consumption data
+      privEC <- read.csv ("data/private/private_housing.csv") # read csv
+      coordinates(privEC) <- ~X+Y
+      # convert files to same CRS
+      proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
+      proj4string(privEC) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
+      
+      # use spatiaEco to map houses to subzones
+      privEC_in_subzone <- point.in.poly(privEC, subzones)
+      privEC_in_subzone_df <- as.data.frame(privEC_in_subzone)
+      
+      aggregated_avg_priv_ec_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_df, subzones)
+      
+      ecList[["2015"]] <<- aggregated_avg_priv_ec_by_subzone
+      # ecList<<-c(shpList,aggregated_avg_priv_ec_by_subzone)
+    }
+     
+    print(paste("X", input$monthSelector, sep=""))
+    monthName <- switch(input$monthSelector, "1" = "Jan", "2" = "Feb", "3" = "Mar","4" = "Apr", "5" = "May",
+                         "6" = "Jun", "7"="Jul","8"="Aug","9"="Sep","10"="Oct","11"="Nov","12"="Dec")
+    output$title <- renderUI({
+      
+      h3(paste("Energy Consumption in ", monthName))
+    })
     
-    # read private housing energy consumption data
-    privEC <- read.csv ("data/private/private_housing.csv") # read csv
-    coordinates(privEC) <- ~X+Y
-    # convert files to same CRS
-    proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    proj4string(privEC) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    
-    # use spatiaEco to map houses to subzones
-    privEC_in_subzone <- point.in.poly(privEC, subzones)
-    privEC_in_subzone_df <- as.data.frame(privEC_in_subzone)
-    
-    aggregated_avg_priv_ec_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_df, subzones)
-    #print(aggregated_avg_priv_ec_by_subzone$X1)
-    #print(na.omit(aggregated_avg_priv_ec_by_subzone$X1))
-    aggregated_avg_priv_ec_by_subzone_noNA <- completeFun(aggregated_avg_priv_ec_by_subzone, "X1")
+    #get selected year's data
+    aggregated_avg_priv_ec_by_subzone<-ecList[["2015"]] 
+    aggregated_avg_priv_ec_by_subzone_noNA <- completeFun(aggregated_avg_priv_ec_by_subzone, monthName)
     subzones_noNA <- merge(subzones, aggregated_avg_priv_ec_by_subzone_noNA, by.x="SUBZONE_N", by.y="SUBZONE_N", all.x=FALSE)
     
     wm_q <- poly2nb(subzones_noNA, queen=TRUE)
     rswm_q <- nb2listw(wm_q, zero.policy = TRUE)
     
     aggregated_avg_priv_ec_by_subzone[is.na(aggregated_avg_priv_ec_by_subzone)] <- 0
-    localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA$X1, rswm_q)
+    # localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA$monthNames, rswm_q)
+    localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)], rswm_q)
+    
     #print(localMI)
     
     #localMI[is.na(localMI)] <- 0 #replace Na with 0
@@ -57,50 +74,53 @@ shinyServer(function(input, output) {
     
     #localMI[complete.cases(localMI),]
     
-    print(localMI)
-    
-    localMI.shade <- auto.shading(c(localMI[,1],-localMI[,1]),cols=brewer.pal(5,"PRGn"))
-    choropleth(subzones_noNA,localMI[,1],shading=localMI.shade)
-    choro.legend(170000, 2860000,localMI.shade,cex=0.7)
-    title("Hunan GDPPC 2012 (local Moran I)", cex.main=1.2)
+    #print(localMI)
+    # 
+    # localMI.shade <- auto.shading(c(localMI[,1],-localMI[,1]),cols=brewer.pal(5,"PRGn"))
+    # choropleth(subzones_noNA,localMI[,1],shading=localMI.shade)
+    # choro.legend(170000, 2860000,localMI.shade,cex=0.7)
+    # title("Hunan GDPPC 2012 (local Moran I)", cex.main=1.2)
     
     quadrant <- vector(mode="numeric",length=nrow(localMI))
-    print(quadrant)
-    DV <- aggregated_avg_priv_ec_by_subzone_noNA$X1 - mean(aggregated_avg_priv_ec_by_subzone_noNA$X1)
-    print(DV)
+    #print(quadrant)df[,c("A","B","E")]
+    DV <- aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)] - mean(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)])
+    #print(DV)
     #print(localMI)
     C_mI <- localMI[,1] - mean(localMI[,1])
-    print(C_mI)
+    #print(C_mI)
+    #print(quadrant)
     signif <- 0.1
     quadrant[DV >0 & C_mI>0] <- 4
     quadrant[DV <0 & C_mI<0] <- 1
     quadrant[DV <0 & C_mI>0] <- 2
     quadrant[DV >0 & C_mI<0] <- 3
     quadrant[localMI[,5]>signif] <- 0
-    
+    #print(quadrant)
     brks <- c(0,1,2,3,4)
     colors <- c("white","blue",rgb(0,0,1,alpha=0.4),rgb(1,0,0,alpha=0.4),"red")
-    plot(subzones_noNA,border="lightgray",
-         col=colors[findInterval(quadrant,brks,all.inside=FALSE)])
-    box()
-    legend("bottomright",legend=c("insignificant","low-low","low-high","high-low","high-high"),
-           fill=colors,bty="n",cex=0.7,y.intersp=1,x.intersp=1)
-    title("LISA Cluster Map")
+    # plot(subzones_noNA,border="lightgray",
+    #      col=colors[findInterval(quadrant,brks,all.inside=FALSE)])
+    # box()
+    # legend("bottomright",legend=c("insignificant","low-low","low-high","high-low","high-high"),
+    #        fill=colors,bty="n",cex=0.7,y.intersp=1,x.intersp=1)
+    #title("LISA Cluster Map")
     proj4string(subzones_noNA) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
      shapeData1 <- spTransform(subzones_noNA, CRS("+proj=longlat +datum=WGS84 +no_defs"))
+    leafletProxy("mymap") %>% clearShapes()
     leafletProxy("mymap") %>%
-      addTiles() %>%
-      addPolygons(data = subzones, color = "FFFFFF", fillColor = "red")
-    print("test2")
+       addTiles() %>% 
+       addPolygons(data = shapeData1, color = "black",fillOpacity=0.4, weight=2,
+                   fillColor = colors[findInterval(quadrant,brks,all.inside=FALSE)]
+                   )
     
-    
-    # subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL")
-    # 
-    # proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    # shapeData1 <- spTransform(subzones, CRS("+proj=longlat +datum=WGS84 +no_defs"))
-    proxy <- leafletProxy("mymap") %>%
-      addPolygons(data = shapeData1, color="black", fillColor="orange", fillOpacity=1)
-    
+    output$MS <- renderPlot({
+      moran.plot(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)], rswm_q, zero.policy = TRUE, spChk=FALSE, labels=as.character(aggregated_avg_priv_ec_by_subzone_noNA$SUBZONE_N), xlab="Average Energy Consumption", ylab="Spatially Lag Average Energy Consumption")
+    })
+     print("END")
+  })
+  
+  observeEvent(input$togglePlot, {
+    toggle("MS")
   })
   
   observe({
@@ -121,87 +141,14 @@ shinyServer(function(input, output) {
     proj4string(test1) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
     shapeData <- spTransform(test1, CRS("+proj=longlat +datum=WGS84 +no_defs"))
     
-    # subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL")
-    # 
-    # proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    # shapeData1 <- spTransform(subzones, CRS("+proj=longlat +datum=WGS84 +no_defs"))
-    
+    # removeShape(map, layerId)
     
     leafletProxy("mymap") %>%
+     
       addMarkers(data = shapeData)
       
   })
-  
-  # ############################## LATEST ######################################################
-  # observe({
-  #  
-  #   subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL") # read shapefile
-  #   
-  #   # read private housing energy consumption data
-  #   privEC <- read.csv ("data/private/private_housing.csv") # read csv
-  #   coordinates(privEC) <- ~X+Y
-  #   # convert files to same CRS
-  #   proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-  #   proj4string(privEC) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-  #   
-  #   # use spatiaEco to map houses to subzones
-  #   privEC_in_subzone <- point.in.poly(privEC, subzones)
-  #   privEC_in_subzone_df <- as.data.frame(privEC_in_subzone)
-  #   
-  #   
-  #   aggregated_avg_priv_ec_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_df, subzones)
-  #   #print(aggregated_avg_priv_ec_by_subzone$X1)
-  #   #print(na.omit(aggregated_avg_priv_ec_by_subzone$X1))
-  #   aggregated_avg_priv_ec_by_subzone_noNA <- completeFun(aggregated_avg_priv_ec_by_subzone, "X1")
-  #   subzones_noNA <- merge(subzones, aggregated_avg_priv_ec_by_subzone_noNA, by.x="SUBZONE_N", by.y="SUBZONE_N", all.x=FALSE)
-  #   
-  #   wm_q <- poly2nb(subzones_noNA, queen=TRUE)
-  #   rswm_q <- nb2listw(wm_q, zero.policy = TRUE)
-  #   
-  #   aggregated_avg_priv_ec_by_subzone[is.na(aggregated_avg_priv_ec_by_subzone)] <- 0
-  #   localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA$X1, rswm_q)
-  #   #print(localMI)
-  #   
-  #   #localMI[is.na(localMI)] <- 0 #replace Na with 0
-  #   localMI <- na.omit(localMI) #straight out remove rows with NA
-  #   
-  #   #localMI[complete.cases(localMI),]
-  #  
-  #   print(localMI)
-  # 
-  #   localMI.shade <- auto.shading(c(localMI[,1],-localMI[,1]),cols=brewer.pal(5,"PRGn"))
-  #   choropleth(subzones_noNA,localMI[,1],shading=localMI.shade)
-  #   choro.legend(170000, 2860000,localMI.shade,cex=0.7)
-  #   title("Hunan GDPPC 2012 (local Moran I)", cex.main=1.2)
-  #   
-  #   quadrant <- vector(mode="numeric",length=nrow(localMI))
-  #   print(quadrant)
-  #   DV <- aggregated_avg_priv_ec_by_subzone_noNA$X1 - mean(aggregated_avg_priv_ec_by_subzone_noNA$X1)
-  #   print(DV)
-  #   #print(localMI)
-  #   C_mI <- localMI[,1] - mean(localMI[,1])
-  #   print(C_mI)
-  #   signif <- 0.1
-  #   quadrant[DV >0 & C_mI>0] <- 4
-  #   quadrant[DV <0 & C_mI<0] <- 1
-  #   quadrant[DV <0 & C_mI>0] <- 2
-  #   quadrant[DV >0 & C_mI<0] <- 3
-  #   quadrant[localMI[,5]>signif] <- 0
-  # 
-  #   brks <- c(0,1,2,3,4)
-  #   colors <- c("white","blue",rgb(0,0,1,alpha=0.4),rgb(1,0,0,alpha=0.4),"red")
-  #   plot(subzones_noNA,border="lightgray",col=colors[findInterval(quadrant,brks,all.inside=FALSE)])
-  #   box()
-  #   legend("bottomright",legend=c("insignificant","low-low","low-high","high-low","high-high"),
-  #          fill=colors,bty="n",cex=0.7,y.intersp=1,x.intersp=1)
-  #   title("LISA Cluster Map")
-  #   proj4string(subzones_noNA) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-  #  
-  #   leafletProxy("mymap") %>%
-  #     addTiles() %>%
-  #     addPolygons(data = subzones, color = "03F")
-  #   print("test2")
-  # })
+
   completeFun <- function(data, desiredCols) {
     completeVec <- complete.cases(data[, desiredCols])
     return(data[completeVec, ])
@@ -219,7 +166,11 @@ shinyServer(function(input, output) {
       # get energy consumption in Jan per km square of subzone
       subzones <- transform(subzones, avg = x / (SHAPE_Area / 1000000))
       #rename(merged, c("avg"="montesh"))
-      names(subzones)[names(subzones)=="avg"] <- month
+      
+      monthNames <- switch(month, "1" = "Jan", "2" = "Feb", "3" = "Mar","4" = "Apr", "5" = "May",
+             "6" = "Jun", "7"="Jul","8"="Aug","9"="Sep","10"="Oct","11"="Nov","12"="Dec")
+      
+      names(subzones)[names(subzones)=="avg"] <- monthNames
       
       #drop the x column since incoming iteration would be using the same name
       subzones<-subset(subzones, select=-c(x))
@@ -263,14 +214,14 @@ shinyServer(function(input, output) {
       
     })
   })
-  output$value <- renderPlot({ 
-    selectedShp=input$selectedShp
-    shpListName
-    test<-shpList[1]
-    test1 <- do.call(rbind, lapply(test, data.frame, stringsAsFactors=FALSE))
-    coordinates(test1) <-~XCOORD+YCOORD
-    plot(test1)
-    })
+  # output$value <- renderPlot({ 
+  #   selectedShp=input$selectedShp
+  #   shpListName
+  #   test<-shpList[1]
+  #   test1 <- do.call(rbind, lapply(test, data.frame, stringsAsFactors=FALSE))
+  #   coordinates(test1) <-~XCOORD+YCOORD
+  #   plot(test1)
+  #   })
   
   output$mymap <- renderLeaflet({
     leaflet() %>%

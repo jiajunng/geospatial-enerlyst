@@ -7,26 +7,56 @@
 library(shiny)
 library(leaflet)
 library(shiny)
+library(shinyjs)
+
+
+
+
 
 shinyUI(fluidPage(
+  tags$head(tags$style(
+    HTML('
+        #MS {
+        background-color: #ffffff;
+          padding: 15px;            
+        opacity: 0.8;
+        }
+         #sidebar {
+            background-color: rgba(255,255,255,0.7);
+            padding: 15px;            
+            opacity: 0.9;
+         }
+        
 
+        body, label, input, button, select { 
+          font-family: "Arial";
+        }')
+  )),
   # Application title
   tabsetPanel(
    
     tabPanel("A very nice Map",
              leafletOutput("mymap", height = "800px"),
-             absolutePanel(top=100, left= 50, h4("R, YOU ALRIGHT?")),
-             absolutePanel(top = 200, left = 50,
+             
+             absolutePanel(id="sidebar",top = 100, left = 50,
+                           uiOutput("title"),
+                           
+                           
                            fileInput('inputdata', 'Input shapefile',
                                      accept=c('.shp','.dbf','.sbn','.sbx','.shx',".prj"), 
                                      multiple=TRUE),
-                           checkboxInput("legend", "Show legend", TRUE),
+                           #checkboxInput("legend", "Show legend", TRUE),
                               
                            uiOutput("choose"),
-                           selectInput("dataset", "Choose a dataset:",
-                                       choices = c("rock", "pressure", "cars")),
-                           sliderInput("monthSelector", "Integer:", 
-                                       min = 0, max = 12, value = 1, step= 1)
+                           uiOutput("year"),
+                           sliderInput("monthSelector", "Select a Month:", 
+                                       min = 1, max = 12, value = 1, step= 1),
+                           
+                           absolutePanel(top=67, left=360, width=465, draggable=TRUE, 
+                                         useShinyjs(),
+                                         actionButton("togglePlot", "Show/Hide plot"),
+                                         plotOutput("MS")
+                           )
                            
                            
              ))
