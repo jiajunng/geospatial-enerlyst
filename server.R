@@ -25,7 +25,6 @@ shinyServer(function(input, output) {
   })
   
   observe({
-    
     #print(input$monthSelector)
     if (length(ecList)==0) {
       #subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL") # read shapefile
@@ -51,7 +50,6 @@ shinyServer(function(input, output) {
     monthName <- switch(input$monthSelector, "1" = "Jan", "2" = "Feb", "3" = "Mar","4" = "Apr", "5" = "May",
                          "6" = "Jun", "7"="Jul","8"="Aug","9"="Sep","10"="Oct","11"="Nov","12"="Dec")
     output$title <- renderUI({
-      
       h3(paste("Energy Consumption in ", monthName))
     })
     
@@ -111,7 +109,7 @@ shinyServer(function(input, output) {
        addTiles() %>% 
        addPolygons(data = shapeData1, color = "black",fillOpacity=0.4, weight=2,
                    fillColor = colors[findInterval(quadrant,brks,all.inside=FALSE)]
-                   )
+                   , group="LISA")
     
     output$MS <- renderPlot({
       moran.plot(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)], rswm_q, zero.policy = TRUE, spChk=FALSE, labels=as.character(aggregated_avg_priv_ec_by_subzone_noNA$SUBZONE_N), xlab="Average Energy Consumption", ylab="Spatially Lag Average Energy Consumption")
@@ -159,12 +157,19 @@ shinyServer(function(input, output) {
       privEC_in_subzone_df[, month+1] <- as.numeric(as.character(privEC_in_subzone_df[, month+1] ))
       privEC_in_subzone_df[is.na(privEC_in_subzone_df)] <- 0
       aggregate_ec_by_subzone <- aggregate(privEC_in_subzone_df[,month+1], by=list(SUBZONE_N=privEC_in_subzone_df$SUBZONE_N), FUN=sum)
-      
+      count_housings_in_subzone <- aggregate(privEC_in_subzone_df[,month+1], by=list(SUBZONE_N=privEC_in_subzone_df$SUBZONE_N), FUN=function(x){NROW(x)})
+      #print(count)
+     
       # merge aggregate of energy consumption for Jan to subzone
       subzones <- merge(subzones, aggregate_ec_by_subzone, by.x="SUBZONE_N", by.y="SUBZONE_N", all.x=TRUE)
+      names(subzones)[names(subzones)=="x"] <- "sum"
+      
+      subzones <- merge(subzones, count_housings_in_subzone, by.x="SUBZONE_N", by.y="SUBZONE_N", all.x=TRUE)
+      names(subzones)[names(subzones)=="x"] <- "count"
       
       # get energy consumption in Jan per km square of subzone
-      subzones <- transform(subzones, avg = x / (SHAPE_Area / 1000000))
+      # subzones <- transform(subzones, avg = x / (SHAPE_Area / 1000000))
+      subzones <- transform(subzones, avg = sum / count)
       #rename(merged, c("avg"="montesh"))
       
       monthNames <- switch(month, "1" = "Jan", "2" = "Feb", "3" = "Mar","4" = "Apr", "5" = "May",
@@ -173,7 +178,8 @@ shinyServer(function(input, output) {
       names(subzones)[names(subzones)=="avg"] <- monthNames
       
       #drop the x column since incoming iteration would be using the same name
-      subzones<-subset(subzones, select=-c(x))
+      subzones<-subset(subzones, select=-c(sum))
+      subzones<-subset(subzones, select=-c(count))
     }
     
     #aggregate_ec_by_subzone <- aggregate(privEC_in_subzone_df$Jan, by=list(SUBZONE_N=privEC_in_subzone_df$SUBZONE_N), FUN=sum)
@@ -214,20 +220,21 @@ shinyServer(function(input, output) {
       
     })
   })
-  # output$value <- renderPlot({ 
-  #   selectedShp=input$selectedShp
-  #   shpListName
-  #   test<-shpList[1]
-  #   test1 <- do.call(rbind, lapply(test, data.frame, stringsAsFactors=FALSE))
-  #   coordinates(test1) <-~XCOORD+YCOORD
-  #   plot(test1)
-  #   })
-  
   output$mymap <- renderLeaflet({
     leaflet() %>%
       setView(lng = 103.8198, lat = 1.3521, zoom = 12)%>%
       addTiles()
   })
   
+  
+  leafletProxy("mymap") %>%
+    addTiles(group = "OSM (default)") %>%
+    addProviderTiles(providers$Stamen.Toner, group = "Toner") %>%
+    addProviderTiles(providers$Stamen.TonerLite, group = "Toner Lite") %>%
+    addLayersControl(
+      baseGroups = c("OSM (default)", "Toner", "Toner Lite"),
+      overlayGroups = c("LISA"),
+      options = layersControlOptions(collapsed = FALSE)
+    )
   
 })

@@ -19,12 +19,11 @@ shinyUI(fluidPage(
         #MS {
         background-color: #ffffff;
           padding: 15px;            
-        opacity: 0.8;
+        opacity: 0.9;
         }
          #sidebar {
             background-color: rgba(255,255,255,0.7);
-            padding: 15px;            
-            opacity: 0.9;
+            padding: 15px;
          }
         
 
