@@ -37,13 +37,13 @@ shinyUI(fluidPage(
     tabPanel("A very nice Map",
              leafletOutput("mymap", height = "800px"),
              
-             absolutePanel(id="sidebar",top = 100, left = 50,
+             absolutePanel(id="sidebar",top = 100, left = 50, width = 320,
                            uiOutput("title"),
                            
                            
-                           fileInput('inputdata', 'Input shapefile',
-                                     accept=c('.shp','.dbf','.sbn','.sbx','.shx',".prj"), 
-                                     multiple=TRUE),
+                           # fileInput('inputdata', 'Input shapefile',
+                           #           accept=c('.shp','.dbf','.sbn','.sbx','.shx',".prj"), 
+                           #           multiple=TRUE),
                            #checkboxInput("legend", "Show legend", TRUE),
                               
                            uiOutput("choose"),
@@ -51,11 +51,29 @@ shinyUI(fluidPage(
                            sliderInput("monthSelector", "Select a Month:", 
                                        min = 1, max = 12, value = 1, step= 1),
                            
-                           absolutePanel(top=67, left=360, width=465, draggable=TRUE, 
+                          
+                             fluidRow(
+                               column(4, numericInput("choroClass", "Classes:", 4, min = 2, max = 100)),
+                               column(8,selectInput("choroColor", "Color:",
+                                                    c("Blues"= "Blues","BrBG" = "BrBG","PiYG " = "PiYG","PRGn " = "PRGn",
+                                                      "PuOr " = "PuOr","RdBu " = "RdBu","RdGy " = "RdGy",
+                                                      "RdYlBu" = "RdYlBu","RdYlGn" = "RdYlGn","Spectral" = "Spectral" )))
+                             ),
+                             fluidRow(
+                               column(12,selectInput("choroMethod", "Classification Method:",
+                                                     c("Jenks Natural Breaks" = "jenks",
+                                                       "Equal Interval" = "equal",
+                                                       "Quantile" = "quantile")))
+                             )
+                             
+                           
+                           
+                           ,
+                           absolutePanel(top=500, left=50, width=465, 
+                                         draggable=TRUE, fixed=TRUE,
                                          useShinyjs(),
-                                         actionButton("togglePlot", "Show/Hide plot"),
-                                         plotOutput("MS")
-                           )
+                                         actionButton("togglePlot", "Show/Hide Scatterplot"),
+                                         plotOutput("MS"))
                            
                            
              ))
