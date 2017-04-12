@@ -66,27 +66,27 @@ shinyServer(function(input, output) {
       h4(paste(paste("Energy Consumption in ", monthName), paste(" for year", yearSelected)))
     })
     
-    aggregated_avg_priv_ec_by_subzone<-ecList[[yearSelected]] 
-    aggregated_avg_priv_ec_by_subzone_noNA <- completeFun(aggregated_avg_priv_ec_by_subzone, monthName)
+    selected_ec_by_subzone<-ecList[[yearSelected]] 
+    selected_ec_by_subzone_noNA <- completeFun(selected_ec_by_subzone, monthName)
     
     # dont include rows with 0s
-    aggregated_avg_priv_ec_by_subzone_noNA<-subset(aggregated_avg_priv_ec_by_subzone_noNA, aggregated_avg_priv_ec_by_subzone_noNA[ , monthName] > 0) 
+    selected_ec_by_subzone<-subset(selected_ec_by_subzone, selected_ec_by_subzone[ , monthName] > 0) 
     
-    subzones_noNA <- merge(subzones, aggregated_avg_priv_ec_by_subzone_noNA, by.x="SUBZONE_N",
+    subzones_noNA <- merge(subzones, selected_ec_by_subzone, by.x="SUBZONE_N",
                            by.y="SUBZONE_N", all.x=FALSE)
     
     wm_q <- poly2nb(subzones_noNA, queen=TRUE)
     rswm_q <- nb2listw(wm_q, zero.policy = TRUE)
     
-    aggregated_avg_priv_ec_by_subzone[is.na(aggregated_avg_priv_ec_by_subzone)] <- 0
+    selected_ec_by_subzone[is.na(selected_ec_by_subzone)] <- 0
     # localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA$monthNames, rswm_q)
-    localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)], rswm_q)
+    localMI <- localmoran(selected_ec_by_subzone[,c(monthName)], rswm_q)
     
     #localMI[is.na(localMI)] <- 0 #replace Na with 0
     localMI <- na.omit(localMI) #straight out remove rows with NA
     
     quadrant <- vector(mode="numeric",length=nrow(localMI))
-    DV <- aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)] - mean(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)])
+    DV <- selected_ec_by_subzone[,c(monthName)] - mean(selected_ec_by_subzone[,c(monthName)])
     
     C_mI <- localMI[,1] - mean(localMI[,1])
   
@@ -115,7 +115,7 @@ shinyServer(function(input, output) {
        list(input$mymap_groups,input$choroColor,input$choroClass,input$choroMethod)
      })
      
-     # leaflet with layers
+     # leaflet with layers change 
      observeEvent(
        toListen(),{
        leafletProxy("mymap", data = shapeData) %>%
@@ -136,31 +136,41 @@ shinyServer(function(input, output) {
          monthName <- switch(input$monthSelector, "1" = "Jan", "2" = "Feb", "3" = "Mar",
                              "4" = "Apr", "5" = "May", "6" = "Jun", "7"="Jul","8"="Aug",
                              "9"="Sep","10"="Oct","11"="Nov","12"="Dec")
-         #print(paste("choro for",monthName))
-         # pcol.C = rev(brewer.pal(input$choroClass,input$choroColor))
-         pcol.C = brewer.pal(input$choroClass,input$choroColor)
-         # print("Shape")
-         # print(shapeData)
-         frame.C <- as.data.frame(shapeData[,c(monthName)])
-         nclass.C =classIntervals(frame.C[,1], n=input$choroClass, style=input$choroMethod,                         intervalClosure='right')
-         colcode.C = findColours(nclass.C, pcol.C)
-         print(colcode.C)
-         pal_volume<-colorBin(palette = input$choroColor, domain = frame.C[,1], bins =input$choroClass, pretty = FALSE)
-         
-         qpal.C <- colorQuantile(input$choroColor, frame.C[,1], n = 6)
-         # pal.C<- colorBin(palette = input$choroColor, domain = frame.C[,1], bins = input$choroClass)
-         # print(input$choroClass)
-         # print(colcode.C)
          testing<- as.data.frame(shapeData)
+         ss1 <- merge(subzones, shapeData, by.x="SUBZONE_N",
+                      by.y="SUBZONE_N", all.x=TRUE)
+         # ss1<- as.data.frame(ss1)
+         # ss1[is.na(ss1)] <- 0
+         # ss1 <- merge(subzones, ss1, by.x="SUBZONE_N",
+         #              by.y="SUBZONE_N", all.x=TRUE)
+         ss1 <- spTransform(ss1, CRS("+proj=longlat +datum=WGS84 +no_defs"))
+         
+         
+         pcol.C = brewer.pal(input$choroClass,input$choroColor)
+         frame.C <- as.data.frame(ss1[,c(monthName)])
+         print(frame.C[,1])
+         nclass.C =classIntervals(frame.C[,1], n=input$choroClass, style=input$choroMethod,intervalClosure='right', unique=TRUE)
+         colcode.C = findColours(nclass.C, pcol.C)
+         colcode.C[is.na(colcode.C)] <- "#C0C0C0"
+         # print(colcode.C)
+         breaks <- unique(unlist(nclass.C$brks, use.names = FALSE))
+         
+         # print(nclass.C$brks)
+         # print(nclass.C$brk)
+         pal_volume<-colorBin(na.color = "#C0C0C0",palette = input$choroColor, domain = breaks, 
+                              bins =breaks, pretty = FALSE)
+         qpal.C <- colorQuantile(input$choroColor, frame.C[,1], n = 6)
+         
+         
+        
          #clear first before adding new layers
          leafletProxy("mymap") %>%
            clearGroup(group="Choropleth")
          
-         # popup <-paste(paste0("<b>SUBZONE:</b> ",shapeData$SUBZONE_N), paste0("<b>AVG Energy Consumption: </b>",frame.C[,1]), sep="<br/>")
-         popup <-paste(paste0("<h4><b>",shapeData$SUBZONE_N, "</b></h4>"), paste0("<b>AVG Energy Consumption: </b>",format(round(frame.C[,1], 2), nsmall = 2), " kWh"), sep="<br/>")
+         popup <-paste(paste0("<h4><b>",ss1$SUBZONE_N, "</b></h4>"), paste0("<b>AVG Energy Consumption: </b>",format(round(frame.C[,1], 2), nsmall = 2), " kWh"), sep="<br/>")
          leafletProxy("mymap") %>%
-           # addTiles() %>% 
-           addPolygons(data = shapeData, color = "black", fillColor = colcode.C, weight=1,
+           
+           addPolygons(data = ss1, color = "black", fillColor = colcode.C, weight=1,
                        fillOpacity=0.7, group="Choropleth", popup = popup,
                        highlightOptions = highlightOptions(color = "white", weight = 3,bringToFront = TRUE)) %>%
            addLegend(pal = pal_volume, values = frame.C[,1],
@@ -187,7 +197,7 @@ shinyServer(function(input, output) {
        }
      })
     output$MS <- renderPlot({
-      moran.plot(aggregated_avg_priv_ec_by_subzone_noNA[,c(monthName)], rswm_q, zero.policy = TRUE, spChk=FALSE, labels=as.character(aggregated_avg_priv_ec_by_subzone_noNA$SUBZONE_N), xlab="Average Energy Consumption", ylab="Spatially Lag Average Energy Consumption")
+      moran.plot(selected_ec_by_subzone[,c(monthName)], rswm_q, zero.policy = TRUE, spChk=FALSE, labels=as.character(selected_ec_by_subzone$SUBZONE_N), xlab="Average Energy Consumption", ylab="Spatially Lag Average Energy Consumption")
     })
      print("END")
   })
@@ -240,10 +250,8 @@ shinyServer(function(input, output) {
                                         pubEC_in_subzone_2015_df, subzones)
     aggregated_avg_combined_ec_2014_by_subzone <- aggregateECbyMonthBySubzoneCombined(privEC_in_subzone_2014_df, 
                                                                                       pubEC_in_subzone_2014_df, subzones)
-    aggregated_avg_combined_ec_2013_by_subzone <- aggregateECbyMonthBySubzoneCombined(privEC_in_subzone_2013_df, 
-                                                                                      pubEC_in_subzone_2013_df, subzones)
-    # subzones <- merge(subzones, aggregate_ec_by_subzone, by.x="SUBZONE_N", by.y="SUBZONE_N", all.x=TRUE)
-    
+    aggregated_avg_combined_ec_2013_by_subzone <- aggregateECbyMonthBySubzoneCombined(privEC_in_subzone_2013_df, pubEC_in_subzone_2013_df, subzones) 
+            
     aggregated_avg_priv_ec_2015_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_2015_df, subzones)
     aggregated_avg_priv_ec_2014_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_2014_df, subzones)
     aggregated_avg_priv_ec_2013_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_2013_df, subzones)
@@ -292,7 +300,7 @@ shinyServer(function(input, output) {
     
     for(loop in c(1:length(fileList))){
       if(fileName == fileList[[loop]]){
-        path <-  fileList$datapath
+        path <- fileList[[loop+3]]
       }
     }
     
