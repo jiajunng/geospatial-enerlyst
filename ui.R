@@ -8,10 +8,7 @@ library(shiny)
 library(leaflet)
 library(shiny)
 library(shinyjs)
-
-
-
-
+library(DT)
 
 shinyUI(fluidPage(
   tags$head(tags$style(
@@ -37,14 +34,16 @@ shinyUI(fluidPage(
     tabPanel("A very nice Map",
              leafletOutput("mymap", height = "800px"),
              
-             absolutePanel(id="sidebar",top = 100, left = 50, width = 320,
+             absolutePanel(id="sidebar",top = 50, left = 50, width = 320,
                            uiOutput("title"),
-                           
-                           
-                           # fileInput('inputdata', 'Input shapefile',
-                           #           accept=c('.shp','.dbf','.sbn','.sbx','.shx',".prj"), 
-                           #           multiple=TRUE),
-                           #checkboxInput("legend", "Show legend", TRUE),
+                         
+                           radioButtons("dataType", "Residential Data:",inline=T,
+                                        c("Private" = "Private",
+                                          "Public" = "Public",
+                                          "Both" = "Both")),
+                           selectInput("yearSelector", "Select a Year:",
+                                       c("2013"= "2013","2014" = "2014","2015 " = "2015")),
+                          
                               
                            uiOutput("choose"),
                            uiOutput("year"),
@@ -66,8 +65,6 @@ shinyUI(fluidPage(
                                                        "Quantile" = "quantile")))
                              )
                              
-                           
-                           
                            ,
                            absolutePanel(top=500, left=50, width=465, 
                                          draggable=TRUE, fixed=TRUE,
@@ -76,6 +73,15 @@ shinyUI(fluidPage(
                                          plotOutput("MS"))
                            
                            
-             ))
+             )), tabPanel("A beautiful Map", 
+                          fluidRow(DT::dataTableOutput("table")),
+                          absolutePanel(id="sidebar",top = 100, left = 50, width = 320,
+                                        uiOutput("dataSelect"), 
+                                        fileInput('files', 'Upload data File',
+                                                  accept=c('text/csv', 
+                                                           'text/comma-separated-values,text/plain', 
+                                                           '.csv'))
+                                        )
+             )
   )
 ))
