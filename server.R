@@ -4,7 +4,7 @@
 #
 # http://shiny.rstudio.com
 #
-
+options(java.parameters = "-Xmx8000m")
 library(shiny)
 library(maptools)
 library(rgdal)
@@ -29,7 +29,7 @@ shpListName <-list()
 shpList<-list()
 ecList<-list()
 subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL")
-
+proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
 shinyServer(function(input, output) {
   in_data <- reactive({
     shpListName<<-c(shpListName,gsub("\\..*","",input$inputdata$name[1]))
@@ -67,41 +67,48 @@ shinyServer(function(input, output) {
     })
     
     selected_ec_by_subzone<-ecList[[yearSelected]] 
-    selected_ec_by_subzone_noNA <- completeFun(selected_ec_by_subzone, monthName)
     
     # dont include rows with 0s
     selected_ec_by_subzone<-subset(selected_ec_by_subzone, selected_ec_by_subzone[ , monthName] > 0) 
     
     subzones_noNA <- merge(subzones, selected_ec_by_subzone, by.x="SUBZONE_N",
                            by.y="SUBZONE_N", all.x=FALSE)
-    
+   
     wm_q <- poly2nb(subzones_noNA, queen=TRUE)
+    print(card(wm_q))
     rswm_q <- nb2listw(wm_q, zero.policy = TRUE)
     
     selected_ec_by_subzone[is.na(selected_ec_by_subzone)] <- 0
     # localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA$monthNames, rswm_q)
     localMI <- localmoran(selected_ec_by_subzone[,c(monthName)], rswm_q)
     
-    #localMI[is.na(localMI)] <- 0 #replace Na with 0
-    localMI <- na.omit(localMI) #straight out remove rows with NA
-    
+    # print(localMI)
+    # summary(localMI)
+    # print(rswm_q, zero.policy=TRUE)
+    # summary(rswm_q, zero.policy=TRUE)
+    # print(subzones_noNA)
+    # summary(subzones_noNA)
+    localMI[is.na(localMI)] <- 0 #replace Na with 0
+    # localMI <- na.omit(localMI) #straight out remove rows with NA
+    print(length(localMI[,1]))
     quadrant <- vector(mode="numeric",length=nrow(localMI))
     DV <- selected_ec_by_subzone[,c(monthName)] - mean(selected_ec_by_subzone[,c(monthName)])
-    
+    print(DV)
     C_mI <- localMI[,1] - mean(localMI[,1])
-  
+    print(C_mI)
     signif <- 0.1
     quadrant[DV >0 & C_mI>0] <- 4
     quadrant[DV <0 & C_mI<0] <- 1
     quadrant[DV <0 & C_mI>0] <- 2
     quadrant[DV >0 & C_mI<0] <- 3
     quadrant[localMI[,5]>signif] <- 0
+    print(quadrant)
     #print(quadrant)
     brks <- c(0,1,2,3,4)
     colors <- c("#ffffff","#0571b0","#92c5de","#f4a582","red")
     
     proj4string(subzones_noNA) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-     shapeData <<- spTransform(subzones_noNA, CRS("+proj=longlat +datum=WGS84 +no_defs"))
+    shapeData <<- spTransform(subzones_noNA, CRS("+proj=longlat +datum=WGS84 +no_defs"))
      
      
      # colors and classes for local moran
@@ -128,8 +135,7 @@ shinyServer(function(input, output) {
        if(is.null(input$mymap_groups)){
          return()
        }
-       
-       if (grepl("Choropleth", input$mymap_groups[1])) {
+         if (grepl("Choropleth", input$mymap_groups[1])) {
          showElement("choroClass", anim = TRUE)
          showElement("choroColor", anim = TRUE)
          showElement("choroMethod", anim = TRUE)
@@ -137,18 +143,14 @@ shinyServer(function(input, output) {
                              "4" = "Apr", "5" = "May", "6" = "Jun", "7"="Jul","8"="Aug",
                              "9"="Sep","10"="Oct","11"="Nov","12"="Dec")
          testing<- as.data.frame(shapeData)
-         ss1 <- merge(subzones, shapeData, by.x="SUBZONE_N",
+         completeShape <- merge(subzones, shapeData, by.x="SUBZONE_N",
                       by.y="SUBZONE_N", all.x=TRUE)
-         # ss1<- as.data.frame(ss1)
-         # ss1[is.na(ss1)] <- 0
-         # ss1 <- merge(subzones, ss1, by.x="SUBZONE_N",
-         #              by.y="SUBZONE_N", all.x=TRUE)
-         ss1 <- spTransform(ss1, CRS("+proj=longlat +datum=WGS84 +no_defs"))
-         
+         completeShape <- spTransform(completeShape, CRS("+proj=longlat +datum=WGS84 +no_defs"))
+         frame.C <- as.data.frame(completeShape[,c(monthName)])
          
          pcol.C = brewer.pal(input$choroClass,input$choroColor)
-         frame.C <- as.data.frame(ss1[,c(monthName)])
-         print(frame.C[,1])
+         
+         # print(frame.C[,1])
          nclass.C =classIntervals(frame.C[,1], n=input$choroClass, style=input$choroMethod,intervalClosure='right', unique=TRUE)
          colcode.C = findColours(nclass.C, pcol.C)
          colcode.C[is.na(colcode.C)] <- "#C0C0C0"
@@ -161,16 +163,14 @@ shinyServer(function(input, output) {
                               bins =breaks, pretty = FALSE)
          qpal.C <- colorQuantile(input$choroColor, frame.C[,1], n = 6)
          
-         
-        
          #clear first before adding new layers
          leafletProxy("mymap") %>%
            clearGroup(group="Choropleth")
          
-         popup <-paste(paste0("<h4><b>",ss1$SUBZONE_N, "</b></h4>"), paste0("<b>AVG Energy Consumption: </b>",format(round(frame.C[,1], 2), nsmall = 2), " kWh"), sep="<br/>")
+         popup <-paste(paste0("<h4><b>",completeShape$SUBZONE_N, "</b></h4>"), paste0("<b>AVG Energy Consumption: </b>",format(round(frame.C[,1], 2), nsmall = 2), " kWh"), sep="<br/>")
          leafletProxy("mymap") %>%
            
-           addPolygons(data = ss1, color = "black", fillColor = colcode.C, weight=1,
+           addPolygons(data = completeShape, color = "black", fillColor = colcode.C, weight=1,
                        fillOpacity=0.7, group="Choropleth", popup = popup,
                        highlightOptions = highlightOptions(color = "white", weight = 3,bringToFront = TRUE)) %>%
            addLegend(pal = pal_volume, values = frame.C[,1],
@@ -178,20 +178,56 @@ shinyServer(function(input, output) {
          
        }
        else if (grepl("LISA", input$mymap_groups[1])) {
+         # slotNames(shapeData@polygons[[1]])
+         # print(slotNames(shapeData@polygons[[1]]))
+         # print(shapeData)
+         # shapeData <- shapeData[ order(row.names(shapeData)), ]
+         # print(shapeData)
+         # print(monthName)
+         
+         # print(shapeData)
+         # summary(shapeData)
+         # print(shapeData@data)
+        
+      
          hideChoroControls()
+         frame.C <- as.data.frame(shapeData[,c(monthName)])
+         frame.C<-frame.C[order(as.numeric(rownames(frame.C))),,drop=FALSE]
+         popup <-paste(paste0("<h4><b>",shapeData$SUBZONE_N, "</b></h4>"), 
+                       paste0("<b>AVG Energy Consumption: </b>",
+                              format(round(frame.C[,1], 2), nsmall = 2), " kWh"), 
+                       sep="<br/>")
+         # print(colors[findInterval(quadrant,brks,all.inside=FALSE)])
+         
+         proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
+         subzones <- spTransform(subzones, CRS("+proj=longlat +datum=WGS84 +no_defs"))
+         # legendColors<-c("#ffffff","#0571b0","#92c5de","#f4a582","red", "d3d3d3")
+         # print(legendColors)
+         # test<-c(frame.C[,1], c="NA")
+         # leafletProxy("mymap", data = subzones) %>%
+         # addPolygons(color = "black",
+         #             fillColor = "#d3d3d3",
+         #             fillOpacity=0.8, weight=1)
+         
          leafletProxy("mymap", data = shapeData) %>%
            addPolygons(color = "black",
                        fillColor = colors[findInterval(quadrant,brks,all.inside=FALSE)],
-                       fillOpacity=0.8, weight=1, group="LISA") %>%
+                       fillOpacity=0.8, weight=1, group="LISA",popup = popup) %>%
            addLegend(labels=c("Insignificant","Low-Low","Low-High","High-Low","High-High"),
                      colors=colors,
                      values = frame.C[,1], opacity = 0.7, title="LISA")
        }
        else if (grepl("Local Moran I", input$mymap_groups[1])) {
          hideChoroControls()
+         frame.C <- as.data.frame(shapeData[,c(monthName)])
+         frame.C<-frame.C[order(as.numeric(rownames(frame.C))),,drop=FALSE]
+         popup <-paste(paste0("<h4><b>",shapeData$SUBZONE_N, "</b></h4>"), 
+                       paste0("<b>AVG Energy Consumption: </b>",
+                              format(round(frame.C[,1], 2), nsmall = 2), " kWh"), 
+                       sep="<br/>")
          leafletProxy("mymap", data = shapeData) %>%
            addPolygons(color = "black", fillColor = colcode.LMI ,fillOpacity=0.8,
-                       weight = 1, group = "Local Moran I")%>%
+                       weight = 1, group = "Local Moran I", popup = popup)%>%
            addLegend(pal=pal.LMI, values = localMI[,1], 
                      opacity = 0.7, title = "Local Moran I")
        }
@@ -316,7 +352,7 @@ shinyServer(function(input, output) {
   observeEvent(input$togglePlot, {
     toggle("MS")
   })
-  
+  #to remove##############################
   observe({
     print(input$selectedShp)
     if(is.null(input$selectedShp))
