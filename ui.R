@@ -31,7 +31,7 @@ shinyUI(fluidPage(
   # Application title
   tabsetPanel(
    
-    tabPanel("A very nice Map",
+    tabPanel("Energy Consumption Map",
              leafletOutput("mymap", height = "800px"),
              
              absolutePanel(id="sidebar",top = 50, left = 50, width = 320,
@@ -41,12 +41,8 @@ shinyUI(fluidPage(
                                         c("Private" = "Private",
                                           "Public" = "Public",
                                           "Both" = "Both")),
-                           selectInput("yearSelector", "Select a Year:",
-                                       c("2013"= "2013","2014" = "2014","2015 " = "2015")),
-                          
-                              
-                           uiOutput("choose"),
-                           uiOutput("year"),
+                           uiOutput("yearSelect"),
+                        
                            sliderInput("monthSelector", "Select a Month:", 
                                        min = 1, max = 12, value = 1, step= 1),
                            
@@ -73,15 +69,17 @@ shinyUI(fluidPage(
                                          plotOutput("MS"))
                            
                            
-             )), tabPanel("A beautiful Map", 
-                          fluidRow(DT::dataTableOutput("table")),
-                          absolutePanel(id="sidebar",top = 100, left = 50, width = 320,
-                                        uiOutput("dataSelect"), 
-                                        fileInput('files', 'Upload data File',
-                                                  accept=c('text/csv', 
-                                                           'text/comma-separated-values,text/plain', 
-                                                           '.csv'))
-                                        )
+             )),tabPanel("EMA Datasets", 
+                         sidebarPanel(uiOutput("dataSelect"), 
+                                      fileInput('newfile', 'Upload data File',
+                                                accept = c(
+                                                  'text/csv',
+                                                  'text/comma-separated-values,text/plain',
+                                                  '.csv',
+                                                  '.xlsx')
+                                      )
+                         ),
+                         mainPanel(DT::dataTableOutput("table"))
              )
   )
 ))

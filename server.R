@@ -17,53 +17,55 @@ library(spatstat)
 library(classInt)
 library(RColorBrewer)
 library(rsconnect)
+library(openxlsx)
 # rsconnect::setAccountInfo(name='onthefly',
 #                           token='680ABC7B5A35A89CC84375F50746490A',
 #                           secret='6CFTy6unuRUq0FwOsys9Ndx225l39gzlF8cqUUZP')
 # rsconnect::deployApp()
 # deployApp()
+
+dfList<-list()
+yearList <- list()
 fileList <- list()
 fileNameList <- list()
 month <- 0
-shpListName <-list()
-shpList<-list()
 ecList<-list()
 subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL")
 proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
 shinyServer(function(input, output) {
-  in_data <- reactive({
-    shpListName<<-c(shpListName,gsub("\\..*","",input$inputdata$name[1]))
-  })
-  
+  options(shiny.maxRequestSize=30*1024^2)
   observe({
     #print(input$monthSelector)
     if (length(ecList)==0) {
       preloadData()
     }
-    
+    yearSelected<-input$yearSelector
+    print(input$yearSelector)
+    if(is.null(input$yearSelector)) {
+      yearSelected = yearList[[1]]
+    }
     monthName <- switch(input$monthSelector, "1" = "Jan", "2" = "Feb", "3" = "Mar",
                         "4" = "Apr", "5" = "May", "6" = "Jun", "7"="Jul","8"="Aug",
                         "9"="Sep","10"="Oct","11"="Nov","12"="Dec")
-   
     #get selected year's data
     # yearSelected <- input$yearSelector
     # unlist(input$yearSelector, "[-]")
     if(input$dataType == "Private")
     {
-      yearSelected <- paste(paste(input$yearSelector,"_"), "priv")
+      yearSelected <- paste(paste(yearSelected,"_"), "priv")
     }else if(input$dataType == "Public")
     {
-      yearSelected <- paste(paste(input$yearSelector,"_"), "pub")
+      yearSelected <- paste(paste(yearSelected,"_"), "pub")
     }
     else
     {
-      yearSelected <- paste(paste(input$yearSelector,"_"), "combined")
+      yearSelected <- paste(paste(yearSelected,"_"), "combined")
     }
     yearSelected <- gsub(" ", "", yearSelected, fixed = TRUE)
     
     #Output Title
     output$title <- renderUI({
-      h4(paste(paste("Energy Consumption in ", monthName), paste(" for year", yearSelected)))
+      h4(paste(paste("Energy Consumption in ", monthName), paste(" for year ", input$yearSelector)))
     })
     
     selected_ec_by_subzone<-ecList[[yearSelected]] 
@@ -75,7 +77,7 @@ shinyServer(function(input, output) {
                            by.y="SUBZONE_N", all.x=FALSE)
    
     wm_q <- poly2nb(subzones_noNA, queen=TRUE)
-    print(card(wm_q))
+    # print(card(wm_q))
     rswm_q <- nb2listw(wm_q, zero.policy = TRUE)
     
     selected_ec_by_subzone[is.na(selected_ec_by_subzone)] <- 0
@@ -109,8 +111,7 @@ shinyServer(function(input, output) {
     
     proj4string(subzones_noNA) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
     shapeData <<- spTransform(subzones_noNA, CRS("+proj=longlat +datum=WGS84 +no_defs"))
-     
-     
+    
      # colors and classes for local moran
      pcol.LMI= brewer.pal(5,"PRGn")
      nclass.LMI =classIntervals(localMI[,1], n=5, intervalClosure='right')
@@ -237,147 +238,207 @@ shinyServer(function(input, output) {
     })
      print("END")
   })
-  
-  
   preloadData <- function(){
     # read private csv 
-    privEC2015 <- read.csv ("data/private/2015_Private.csv") 
-    privEC2014 <- read.csv ("data/private/2014_Private.csv")
     privEC2013 <- read.csv ("data/private/2013_Private.csv")
-    
     # read public csv 
-    pubEC2015 <- read.csv ("data/public/2015_Public.csv") 
-    pubEC2014 <- read.csv ("data/public/2014_Public.csv")
     pubEC2013 <- read.csv ("data/public/2013_Public.csv")
-    
-    coordinates(privEC2015) <- ~X+Y
-    coordinates(privEC2014) <- ~X+Y
     coordinates(privEC2013) <- ~X+Y
-    
-    coordinates(pubEC2015) <- ~X+Y
-    coordinates(pubEC2014) <- ~X+Y
     coordinates(pubEC2013) <- ~X+Y
-    
     # convert files to same CRS
     proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    proj4string(privEC2015) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    proj4string(privEC2014) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
     proj4string(privEC2013) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
     
-    proj4string(pubEC2015) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    proj4string(pubEC2014) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
     proj4string(pubEC2013) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    
-    # use spatiaEco to map houses to subzones
-    privEC_in_subzone_2015 <- point.in.poly(privEC2015, subzones)
-    privEC_in_subzone_2015_df <- as.data.frame(privEC_in_subzone_2015)
-    privEC_in_subzone_2014 <- point.in.poly(privEC2014, subzones)
-    privEC_in_subzone_2014_df <- as.data.frame(privEC_in_subzone_2014)
     privEC_in_subzone_2013 <- point.in.poly(privEC2013, subzones)
     privEC_in_subzone_2013_df <- as.data.frame(privEC_in_subzone_2013)
     
-    pubEC_in_subzone_2015 <- point.in.poly(pubEC2015, subzones)
-    pubEC_in_subzone_2015_df <- as.data.frame(pubEC_in_subzone_2015)
-    pubEC_in_subzone_2014 <- point.in.poly(pubEC2014, subzones)
-    pubEC_in_subzone_2014_df <- as.data.frame(pubEC_in_subzone_2014)
     pubEC_in_subzone_2013 <- point.in.poly(pubEC2013, subzones)
     pubEC_in_subzone_2013_df <- as.data.frame(pubEC_in_subzone_2013)
-    aggregated_avg_combined_ec_2015_by_subzone <- aggregateECbyMonthBySubzoneCombined(privEC_in_subzone_2015_df, 
-                                        pubEC_in_subzone_2015_df, subzones)
-    aggregated_avg_combined_ec_2014_by_subzone <- aggregateECbyMonthBySubzoneCombined(privEC_in_subzone_2014_df, 
-                                                                                      pubEC_in_subzone_2014_df, subzones)
-    aggregated_avg_combined_ec_2013_by_subzone <- aggregateECbyMonthBySubzoneCombined(privEC_in_subzone_2013_df, pubEC_in_subzone_2013_df, subzones) 
-            
-    aggregated_avg_priv_ec_2015_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_2015_df, subzones)
-    aggregated_avg_priv_ec_2014_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_2014_df, subzones)
+    aggregated_avg_combined_ec_2013_by_subzone <- aggregateECbyMonthBySubzoneCombined(privEC_in_subzone_2013_df, 
+                                                                                      pubEC_in_subzone_2013_df, subzones)
     aggregated_avg_priv_ec_2013_by_subzone <- aggregateECbyMonthBySubzone(privEC_in_subzone_2013_df, subzones)
     
-    aggregated_avg_pub_ec_2015_by_subzone <- aggregateECbyMonthBySubzone(pubEC_in_subzone_2015_df, subzones)
-    aggregated_avg_pub_ec_2014_by_subzone <- aggregateECbyMonthBySubzone(pubEC_in_subzone_2014_df, subzones)
     aggregated_avg_pub_ec_2013_by_subzone <- aggregateECbyMonthBySubzone(pubEC_in_subzone_2013_df, subzones)
     
-    ecList[["2015_priv"]] <<- aggregated_avg_priv_ec_2015_by_subzone
-    ecList[["2014_priv"]] <<- aggregated_avg_priv_ec_2014_by_subzone
-    ecList[["2013_priv"]] <<- aggregated_avg_priv_ec_2013_by_subzone
+    ecList[["2013_priv"]]<<- aggregated_avg_priv_ec_2013_by_subzone
     
-    ecList[["2015_pub"]] <<- aggregated_avg_pub_ec_2015_by_subzone
-    ecList[["2014_pub"]] <<- aggregated_avg_pub_ec_2014_by_subzone
     ecList[["2013_pub"]] <<- aggregated_avg_pub_ec_2013_by_subzone
     
-    ecList[["2015_combined"]] <<- aggregated_avg_combined_ec_2015_by_subzone
-    ecList[["2014_combined"]] <<- aggregated_avg_combined_ec_2014_by_subzone
-    ecList[["2013_combined"]] <<- aggregated_avg_combined_ec_2013_by_subzone
+    ecList[["2013_combined"]]<<- aggregated_avg_combined_ec_2013_by_subzone
     
-   
+    yearList<<- c(yearList, "2013")
   }
   
   dataInput <- reactive({
-    inFile <- input$files
+    inFile <- input$newfile
     if (is.null(inFile))
       return(NULL)
     
+    fileNameNoExt <- stringi::stri_extract_first(str = inFile$name, regex = ".*(?=\\.)")
+    fileYear <- substr(fileNameNoExt, 1, 4)
+    yearList <<- c(yearList, fileYear)
     
-    fileName <- inFile$name #stringi::stri_extract_first(str = inFile$name, regex = ".*(?=\\.)")
-    fileList<<- c(fileList, inFile)
-    fileNameList<<- c(fileNameList,fileName)
+    fileName <- inFile$name
+    fileNameList<<- c(fileNameList, fileNameNoExt)
+    
+    if (grepl("pub", fileNameNoExt)) {
+      year_data<-read.xlsx(inFile$datapath,
+                           sheet = 1,
+                           colNames=FALSE,
+                           startRow=4)
+      year_data<-subset(year_data, select=c(X1))
+      names(year_data)[names(year_data)=="X1"] <- "Postal"
+      
+      for(loop in c(1:12)){
+        raw_month_data <- read.xlsx(inFile$datapath, 
+                                    sheet = loop,
+                                    colNames=FALSE,
+                                    startRow=4)
+        
+        raw_month_data[2:5] <- lapply( raw_month_data[2:5], function(col) as.numeric( gsub("-$|\\,", "", col) ) )
+        raw_month_data[is.na(raw_month_data)] <- 0
+        
+        raw_month_data[,2] <- as.numeric(as.character(raw_month_data[,2] ))
+        raw_month_data[,3] <- as.numeric(as.character(raw_month_data[,3] ))
+        raw_month_data[,4] <- as.numeric(as.character(raw_month_data[,4] ))
+        raw_month_data[,5] <- as.numeric(as.character(raw_month_data[,5] ))
+        raw_month_data[,8] <- rowSums(raw_month_data[, c(2, 3, 4, 5)])
+        
+        year_data <- merge(x = year_data, y = raw_month_data, by.x='Postal', by.y='X1', all.x = TRUE)
+        
+        monthName <- switch(loop, "1" = "Jan", "2" = "Feb", "3" = "Mar",
+                            "4" = "Apr", "5" = "May", "6" = "Jun", "7"="Jul","8"="Aug",
+                            "9"="Sep","10"="Oct","11"="Nov","12"="Dec")
+        names(year_data)[names(year_data)=="V8"] <- monthName
+        
+        year_data<-subset(year_data, select=-c(X5))
+        year_data<-subset(year_data, select=-c(X4))
+        year_data<-subset(year_data, select=-c(X3))
+        year_data<-subset(year_data, select=-c(X2))
+        
+        
+        if (loop != 12) {
+          year_data<-subset(year_data, select=-c(X7))
+          year_data<-subset(year_data, select=-c(X6))
+        } else {
+          names(year_data)[names(year_data)=="X6"] <- "X"
+          names(year_data)[names(year_data)=="X7"] <- "Y"
+        }
+      }
+      
+      # reorder columns
+      year_data <- year_data[c(1,2,3,4,5,6,7,8,9,10,11,12,15,13,14)]
+      
+      fileList[[fileNameNoExt]] <<- year_data
+      
+    } else if (grepl("priv", fileNameNoExt)) {
+      year_data<-read.xlsx(inFile$datapath,
+                           sheet = 1,
+                           colNames=TRUE,
+                           startRow=3)
+      
+      names(year_data)[names(year_data)=="Postal.Code"] <- "Postal"
+      names(year_data)[names(year_data)=="X"] <- "X"
+      names(year_data)[names(year_data)=="Y"] <- "Y"
+      
+      fileList[[fileNameNoExt]] <<- year_data
+    }
+    
+    # clean up na and s
+    year_data$Jan <- as.character(year_data$Jan)
+    year_data$Jan[year_data$Jan == "s"] <- "0"
+    year_data$Feb <- as.character(year_data$Feb)
+    year_data$Feb[year_data$Feb == "s"] <- "0"
+    year_data$Mar <- as.character(year_data$Mar)
+    year_data$Mar[year_data$Mar == "s"] <- "0"
+    year_data$Apr <- as.character(year_data$Apr)
+    year_data$Apr[year_data$Apr == "s"] <- "0"
+    year_data$May <- as.character(year_data$May)
+    year_data$May[year_data$May == "s"] <- "0"
+    year_data$Jun <- as.character(year_data$Jun)
+    year_data$Jun[year_data$Jun == "s"] <- "0"
+    year_data$Jul <- as.character(year_data$Jul)
+    year_data$Jul[year_data$Jul == "s"] <- "0"
+    year_data$Aug <- as.character(year_data$Aug)
+    year_data$Aug[year_data$Aug == "s"] <- "0"
+    year_data$Sep <- as.character(year_data$Sep)
+    year_data$Sep[year_data$Sep == "s"] <- "0"
+    year_data$Oct <- as.character(year_data$Oct)
+    year_data$Oct[year_data$Oct == "s"] <- "0"
+    year_data$Nov <- as.character(year_data$Nov)
+    year_data$Nov[year_data$Nov == "s"] <- "0"
+    year_data$Dec <- as.character(year_data$Dec)
+    year_data$Dec[year_data$Dec == "s"] <- "0"
+    year_data[is.na(year_data)] <- 0
+    
+    year_data[, 1] <- as.integer(as.character(year_data[, 1]))
+    year_data$X <- as.numeric(as.character(year_data$X)) 
+    year_data$Y <- as.numeric(as.character(year_data$Y)) 
+    # shang mian is int + factor. x-y are num
+    
+    
+    # year_data <- na.omit(year_data)
+    coordinates(year_data) <- ~X+Y
+    subzones <- readOGR(dsn = "data/shp", layer = "MP14_SUBZONE_NO_SEA_PL")
+    proj4string(subzones) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
+    proj4string(year_data) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
+    
+    year_data_in_subzone <- point.in.poly(year_data, subzones)
+    year_data_in_subzone_df <- as.data.frame(year_data_in_subzone)
+    dfList[[fileNameNoExt]] <<- year_data_in_subzone_df
+    aggregated_avg_ec_by_subzone <- aggregateECbyMonthBySubzone(year_data_in_subzone_df, subzones)
+    ecList[[fileNameNoExt]] <<- aggregated_avg_ec_by_subzone
+    
+    
+    print("combining...")
+    priv_file_name <- paste(fileYear, "_priv", sep = "")
+    pub_file_name <- paste(fileYear, "_pub", sep = "")
+    
+    print(priv_file_name)
+    print(pub_file_name)
+    
+    if (!is.null(ecList[[priv_file_name]])) {
+      if(!is.null(ecList[[pub_file_name]])) {
+        priv_df <- dfList[[priv_file_name]]
+        pub_df <- dfList[[pub_file_name]]
+        combined <- aggregateECbyMonthBySubzoneCombined(priv_df, pub_df, subzones)
+        print(combined)
+        combined_name <- paste(fileYear, "_combined", sep = "")
+        ecList[[combined_name]] <<- combined
+      }
+    }
+    print("upload ok")
   })
+  
+  output$dataSelect <- renderUI({
+    dataInput()
+    selectInput("dataChoice", "View uploaded data:", choices = fileNameList)
+  })
+  
+  output$table <- DT::renderDataTable(DT::datatable({
+    fileName <- input$dataChoice
+    data <- ecList[[fileName]]
+    return(data)
+  }))
   
   output$dataSelect <- renderUI({
     dataInput()
     selectInput("dataChoice", "Data Selection:", choices = fileNameList)
   })
   
-  output$table <- DT::renderDataTable(DT::datatable({
-    fileName <- input$dataChoice
-    # data <- fileList$fileName
-    # data <- fileList[c(fileName)]
-    print(fileName)
-    print(fileList)
-    
-    for(loop in c(1:length(fileList))){
-      if(fileName == fileList[[loop]]){
-        path <- fileList[[loop+3]]
-      }
-    }
-    
-    # file <- fileList[grepl(fileName, names(fileList$name))]
-    #file <- fileList$name[fileName]
-    # print(file)
-    print(path)
-    data <- read.csv(path, header=TRUE, sep=",", quote = "\"")
-    print(data)
-    data
-  }))
+  
+  output$yearSelect <- renderUI({
+    dataInput()
+    print(yearList)
+    selectInput("yearSelector", "Select a Year:", choices = yearList)
+  })
+  
   
   observeEvent(input$togglePlot, {
     toggle("MS")
   })
-  #to remove##############################
-  observe({
-    print(input$selectedShp)
-    if(is.null(input$selectedShp))
-    {
-      clearMarkers(leafletProxy("mymap"))
-      return()
-    }
-      
-    testing<-input$selectedShp
-    
-    asd<-match(testing,shpListName)
-    shptest<-shpList[asd]
-    print(shptest)
-    test1 <- do.call(rbind, lapply(shptest, data.frame, stringsAsFactors=FALSE))
-    coordinates(test1) <-~XCOORD+YCOORD
-    proj4string(test1) <- CRS("+proj=tmerc +lat_0=1.366666666666667 +lon_0=103.8333333333333 +k=1 +x_0=28001.642 +y_0=38744.572 +ellps=WGS84 +units=m +no_defs")
-    shapeData <- spTransform(test1, CRS("+proj=longlat +datum=WGS84 +no_defs"))
-    
-    # removeShape(map, layerId)
-    
-    leafletProxy("mymap") %>%
-     
-      addMarkers(data = shapeData)
-      
-  })
+ 
 
   completeFun <- function(data, desiredCols) {
     completeVec <- complete.cases(data[, desiredCols])
@@ -478,39 +539,6 @@ shinyServer(function(input, output) {
     return(subzones)
   }
   
-  observe({
-    myshape<- input$inputdata
-    if (is.null(myshape)) 
-      return(NULL)       
-    
-    dir<-dirname(myshape[1,4])
-    
-    for ( i in 1:nrow(myshape)) {
-      file.rename(myshape[i,4], paste0(dir,"/",myshape[i,1]))}
-    
-    getshp <- list.files(dir, pattern="*.shp", full.names=TRUE)
-    
-    shape<-readOGR(dsn = getshp)
-    shpList<<-c(shpList,shape)
-    print(length(shpList))
-    test<-shpList[1]
-    test1 <- do.call(rbind, lapply(test, data.frame, stringsAsFactors=FALSE))
-    coordinates(test1) <-~XCOORD+YCOORD
-    
-    
-    # Check boxes
-    output$choose <- renderUI({
-      # If missing input, return to avoid error later in function
-      if(is.null(input$dataset))
-        return()
-      
-      checkboxGroupInput("selectedShp", "Choose Layer", 
-                         choices  = in_data(),
-                         selected = 1)
-      
-      
-    })
-  })
   output$mymap <- renderLeaflet({
     leaflet() %>%
       setView(lng = 103.8198, lat = 1.3521, zoom = 12)%>%
