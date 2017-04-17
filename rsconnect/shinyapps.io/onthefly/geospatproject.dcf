@@ -3,8 +3,8 @@ title:
 account: onthefly
 server: shinyapps.io
 appId: 170103
-bundleId: 790690
+bundleId: 790835
 url: https://onthefly.shinyapps.io/geospatproject/
-when: 1492314630.30598
+when: 1492337513.97395
 asMultiple: FALSE
 asStatic: FALSE

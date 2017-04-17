@@ -84,13 +84,13 @@ shinyServer(function(input, output) {
     # localMI <- localmoran(aggregated_avg_priv_ec_by_subzone_noNA$monthNames, rswm_q)
     localMI <- localmoran(selected_ec_by_subzone[,c(monthName)], rswm_q)
     
-    # print(localMI)
+     print(localMI)
     # summary(localMI)
     # print(rswm_q, zero.policy=TRUE)
     # summary(rswm_q, zero.policy=TRUE)
     # print(subzones_noNA)
     # summary(subzones_noNA)
-    localMI[is.na(localMI)] <- 0 #replace Na with 0
+    localMI[is.na(localMI)] <- 1 #replace Na with 1, makes the 2 subzones with no neighbours insignificant
     # localMI <- na.omit(localMI) #straight out remove rows with NA
     print(length(localMI[,1]))
     quadrant <- vector(mode="numeric",length=nrow(localMI))
@@ -311,12 +311,10 @@ shinyServer(function(input, output) {
                             "4" = "Apr", "5" = "May", "6" = "Jun", "7"="Jul","8"="Aug",
                             "9"="Sep","10"="Oct","11"="Nov","12"="Dec")
         names(year_data)[names(year_data)=="V8"] <- monthName
-        
         year_data<-subset(year_data, select=-c(X5))
         year_data<-subset(year_data, select=-c(X4))
         year_data<-subset(year_data, select=-c(X3))
         year_data<-subset(year_data, select=-c(X2))
-        
         
         if (loop != 12) {
           year_data<-subset(year_data, select=-c(X7))
